@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body {font-family: Arial, Helvetica, sans-serif;}
+
+      input[type=text], input[type=password] {
+        width: 100%;
+        padding: 12px 20px;
+        margin: 8px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-sizing: border-box;
+      }
+
+      button {
+        background-color: #08090F;
+        color: white;
+        padding: 14px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        width: 100%;
+      }
+      button:hover {
+        opacity: 0.8;
+      }
+
+      .form-container {
+        padding: 16px;
+        max-width: 500px;
+      }
+
+      .form {
+        background-color: #fefefe;
+        margin: 2% auto 2% auto; /* 5% from the top, 15% from the bottom and centered */
+        /* border: 1px solid #888; */
+        width: 80%; /* Could be more or less, depending on screen size */
+      }
+
+      .form label {
+        font-weight: bold;
+      }
+
+      #error {
+        color: red;
+        text-align: center;
+      }
+
+      .center {
+        margin: auto;
+      }
+
+      /* Add Zoom Animation */
+      .animate {
+        -webkit-animation: animatezoom 0.6s;
+        animation: animatezoom 0.6s
+      }
+
+      @-webkit-keyframes animatezoom {
+        from {-webkit-transform: scale(0)}
+        to {-webkit-transform: scale(1)}
+      }
+
+      @keyframes animatezoom {
+        from {transform: scale(0)}
+        to {transform: scale(1)}
+      }
+    </style>
+    <title>Login</title>
+  </head>
+
+  <body>
+
+    <div class="form-container center">
+      <form class="form animate" action="" onsubmit="apiPostLogin(event); return true;">
+        <label for="host">Host</label>
+        <input type="text" id="host" name="host" value="127.0.0.1:8000" required>
+
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="admin" required>
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" value="admin" required>
+
+        <button type="submit">Login</button>
+      </form>
+    </div>
+
+    <div class="container-error">
+      <p id="error"></p>
+    </div>
+
+
+    <!-- JAVASCRIPT ------------------------------------------------------------------->
+    <script>
+      const indexUrl = "/";
+      const errorP = document.getElementById("error");
+
+      const onDocumentReady = async () => {
+        // Hit /me endpoint and if it succeeds then redirect to index.
+        // Doing this instead of checking for the presence of the sessionid cookie
+        //  because Safari always returns expired cookies. And /logout does not
+        //  erase cookies (such thing doesn't exist) but expires them.
+        try {
+          const username = await apiGetMe();
+          location.href = indexUrl;
+        } catch (exc) {
+          // Ok, user not logged in.
+        }
+      };
+      document.addEventListener("DOMContentLoaded", onDocumentReady);
+
+      const apiPostLogin = async (event) => {
+        event.preventDefault();
+
+        const data = new FormData(event.target, null);
+        // data.forEach((e) => console.log(e));
+        const host = data.get("host");
+        const username = data.get("username");
+
+        let response;
+        try {
+          response = await fetch(`http://${host}/api/login`, {
+            method: "POST",
+            body: data,
+          });
+        } catch (exc) {
+          console.log(exc);
+          errorP.innerHTML = `Cannot reach the host ${host}`;
+          return;
+        }
+        console.log(response);
+
+        if (response.ok) {
+          // Store username and host in local storage.
+          localStorage.clear();
+          localStorage.setItem("host", host.toString());
+          localStorage.setItem("username", username.toString());
+          // Redirect to index.
+          location.href = indexUrl;
+        } else {
+          console.log(response);
+          errorP.innerHTML = "Username or password invalid";
+          return;
+        }
+      };
+
+      const apiGetMe = async () => {
+        let response;
+        try {
+          response = await fetch("/api/me", {
+            method: "GET",
+          });
+        } catch (exc) {
+          console.log(exc);
+          throw new Error("Cannot reach the host");
+        }
+        console.log(response);
+
+        if (!(response.ok)) {
+          console.log(response);
+          throw new Error("GET /me error");
+        }
+
+        const username = await response.text();
+        return username;
+      };
+    </script>
+
+  </body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body {font-family: Arial, Helvetica, sans-serif;}
+
+      input[type=text], input[type=password] {
+        /*width: 100%;*/
+        padding: 12px 20px;
+        margin: 8px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-sizing: border-box;
+      }
+
+      button {
+        background-color: #08090F;
+        color: white;
+        padding: 14px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        /*width: 100%;*/
+      }
+      button:hover {
+        opacity: 0.8;
+      }
+
+      .header {
+        text-align: right;
+      }
+
+      .console {
+        background-color: black;
+        color: greenyellow;
+        border-radius: 8px;
+      }
+
+      #messages {
+        list-style-type: none;
+        font-family: monospace;
+        padding: 1em;
+      }
+
+      .gray {
+        color: gray;
+      }
+
+      .red {
+        color: red;
+      }
+    </style>
+
+    <title>WebSocket FastAPI: Echo+Ping+CookieAuth</title>
+  </head>
+
+  <body>
+    <div class="header">
+      <span id="username">username</span> <a href="javascript:apiPostLogout()">logout</a>
+    </div>
+
+    <h1>WebSocket FastAPI: Echo + Ping + Cookie Auth</h1>
+
+    <p>
+      Send some text and it will be echo'd back by the server.<br>
+      Send the text <code>PING</code> to run a ping command on the server.<br>
+      Send the text <code>CLOSE</code> to close the WebSocket.
+    </p>
+
+    <form action="" onsubmit="sendWsData(event); return true;">
+      <input autocomplete="off" id="messageText" type="text" />
+      <button>Send</button>
+    </form>
+
+    <div class="console">
+      <ul id="messages"></ul>
+    </div>
+
+
+    <!-- JAVASCRIPT ------------------------------------------------------------------->
+    <script>
+      const loginUrl = "login.html";
+      const onDocumentReady = async () => {
+        // Redirect if not logged in.
+        const sessionid = getCookie("sessionid");
+        console.log(`Found cookie sessionid=${sessionid}`);
+        if (!(sessionid)) location.href = loginUrl;
+
+        // Display the username in the header.
+        const username = localStorage.getItem("username");
+        const usernameSpan = document.getElementById("username");
+        usernameSpan.innerHTML = username;
+
+        // Hit /me endpoint and if it fails then execute logout.
+        try {
+          const username = await apiGetMe();
+        } catch (exc) {
+          await apiPostLogout();
+        }
+      };
+      document.addEventListener("DOMContentLoaded", onDocumentReady);
+
+      const getCookie = (name) => {
+        const value = `; ${document.cookie}`;
+        let parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+      };
+
+      const apiPostLogout = async () => {
+        let response;
+        try {
+          response = await fetch("/api/logout", {
+            method: "POST",
+          });
+        } catch (exc) {
+          console.log(exc);
+          appendText("Cannot reach the host", "red");
+          return;
+        }
+        console.log(response);
+
+        if (response.ok) {
+          localStorage.clear();
+          location.href = loginUrl;
+        } else {
+          console.log(response);
+          appendText("Logout error", "red");
+          return;
+        }
+      };
+
+      const apiGetMe = async () => {
+        let response;
+        try {
+          response = await fetch("/api/me", {
+            method: "GET",
+          });
+        } catch (exc) {
+          console.log(exc);
+          throw new Error("Cannot reach the host");
+        }
+        console.log(response);
+
+        if (!(response.ok)) {
+          console.log(response);
+          throw new Error("GET /me error");
+        }
+
+        const username = await response.text();
+        return username;
+      };
+
+      let ws = null;
+      const initWebsocket = async () => {
+        const host = localStorage.getItem("host");
+        if (!host) appendText("Host not in localStorage", "red");
+
+        ws = new WebSocket(`ws://${host}/ws`);
+
+        ws.onopen = () => {
+          // ws.send("Message to send");
+          appendText("[Websocket open]", "gray");
+        };
+
+        ws.onclose = async (event) => {
+          console.log(event);
+          if (event.code===1011 && event.reason==="forbidden") {
+            await apiPostLogout();
+          }
+          appendText("[Websocket closed]", "gray");
+          ws = null;
+        };
+
+        ws.onmessage = (event) => {
+          console.log(event.data);
+          appendText(event.data);
+        };
+
+        ws.onerror = (event) => {
+          appendText("Websocket error", "red");
+        }
+
+        console.log(ws.readyState);
+        while (ws && ws.readyState !== 1) {
+          console.log(ws.readyState);
+          await sleep(500);
+        }
+      };
+
+      const sendWsData = async (event) => {
+        event.preventDefault();
+        if (!ws) {
+          await initWebsocket();
+        }
+        const input = document.getElementById("messageText");
+        try {
+          ws.send(input.value);
+        } catch (exc) {
+          appendText("Websocket error", "red");
+        }
+        input.value = "";
+      }
+      
+      const appendText = (text, className) => {
+        const ul = document.getElementById("messages");
+        const li = document.createElement("li");
+        if (className) li.setAttribute("class", className);
+        const content = document.createTextNode(text);
+        li.appendChild(content);
+        ul.appendChild(li);
+      }
+
+      const sleep = (msec) => {
+        return new Promise((resolve) => setTimeout(resolve, msec));
+      };
+    </script>
+  </body>
+</html>
